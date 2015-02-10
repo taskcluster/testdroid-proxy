@@ -7,6 +7,7 @@ import Joi from 'joi';
 import { ArgumentParser } from 'argparse';
 import Testdroid from 'testdroid-client';
 import DeviceHandler from '../handlers/device';
+import sleep from '../util';
 
 let debug = Debug('testdroid-proxy:server');
 
@@ -40,13 +41,6 @@ parser.addArgument(
 );
 
 let args = parser.parseArgs();
-
-function sleep(duration) {
-  return new Promise(function(accept) {
-    setTimeout(accept, duration);
-    });
-}
-
 
 let server = new Hapi.Server();
 server.connection({ port: 80 });
@@ -93,6 +87,9 @@ server.route([
         }
       },
       timeout: {
+        // Keep connection open for up to 10 minutes while flashing
+        // XXX: This is a hack, in the future should make available a status
+        // endpoint to query instead of keeping this open.
         server: 10*60*1000,
         socket: 11*60*1000
       }

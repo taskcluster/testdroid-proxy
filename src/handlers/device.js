@@ -1,22 +1,24 @@
 import Debug from 'debug';
 import util from 'util';
+import sleep from '../util';
 
 let debug = Debug('testdroid-proxy:handler:device');
-let buildLabelGroupName = 'Build version';
+let buildLabelGroupName = 'Build Identifier';
 let flashProjectName = 'flash-fxos';
 
-
-function sleep(duration) {
-  return new Promise(function(accept) {
-    setTimeout(accept, duration);
-    });
-}
 export default class {
   constructor(testdroid) {
     this.flashStatus = undefined;
     this.client = testdroid;
   }
 
+  /**
+   * Will flash a given `deviceType` with the build package found at `buildUrl`.
+   *
+   * @param {String} deviceType - Type of device that testdroid is aware of. Example: 't2m flame'
+   * @param {String} buildUrl - Location of the build packge used for flashing the device
+   *
+   */
   async flashDevice(deviceType, buildUrl) {
     let t = this.client;
     let project = await t.getProject(flashProjectName);
@@ -55,8 +57,27 @@ export default class {
     let finishedAt = new Date(Date.now());
     debug(`Test Run ${testRun.id} finished at ${finishedAt}. Duration: ${(finishedAt - createdAt)/1000} seconds.`);
     debug(util.inspect(testRun));
+    // TODO: Inspect the test run and see if the success/failure of the run can be inferred.
   }
 
+  /**
+   * Returns all devices testdroid is aware of for the user account.
+   */
+  async getDevices() {
+    let devices = await this.client.getDevices();
+    return devices;
+  }
+
+  /**
+   * Attempts to create a device session for one of the devices provided.  Device
+   * must be 'online'.  Because of the delay between flashing and creating a device
+   * session, a request for a session will be attempted 3 times with a 2 second delay
+   * between attempts.
+   *
+   * @param {Array} devices - List of devices provided by the testdroid api.
+   *
+   * @returns {Object} session
+   */
   async getDeviceSession(devices) {
     let session;
     for(let i = 0; i < devices.length; i++) {
@@ -79,19 +100,39 @@ export default class {
     return session;
   }
 
+  /**
+   * Release the device session
+   *
+   * @param {Object} device - Device object that contains a session.id
+   */
   async releaseDevice(device) {
     await this.client.stopDeviceSession(device.session.id);
   }
 
-  async getDevice(type, buildUrl) {
+  /**
+   * Attempts to retrieve a device of a particular type with a particular build.
+   * Devices are labeled with the build url after flashing and this will find devices
+   * with such a label.
+   *
+   * If no devices can be found matching the build, a device will be flashed.
+   * This operation usually takes 3-5 minutes on average.
+   *
+   * Once a device can be found, ADB and marionette sessions will be created.
+   *
+   * @param {String} deviceType - Type of device that testdroid is aware of. Example: 't2m flame'
+   * @param {String} buildUrl - Location of the build packge used for flashing the device
+   *
+   * @returns {Object} device - Device object that has session and proxy information.
+   */
+  async getDevice(deviceType, buildUrl) {
     let t = this.client;
-    debug(`Attempting to get a ${type} device with ${buildUrl}`);
+    debug(`Attempting to get a ${deviceType} device with ${buildUrl}`);
     let device, session;
     let maxRetries = 2;
 
     let labelGroup = await t.getLabelGroup(buildLabelGroupName);
     while (maxRetries-- > 0) {
-      debug(`Attempting to get a ${type} device with ${buildUrl}. Retries left: ${maxRetries}`);
+      debug(`Attempting to get a ${deviceType} device with ${buildUrl}. Retries left: ${maxRetries}`);
       // Find out if the label for the build url exists. Label won't exist if
       // build never was flashed before.
       let label = await t.getLabelInGroup(buildUrl, labelGroup);
@@ -106,7 +147,7 @@ export default class {
         }
       }
       // If no label or can't create a device session, flash something and try again
-      await this.flashDevice(type, buildUrl);
+      await this.flashDevice(deviceType, buildUrl);
     }
 
     if(!session) return;
@@ -125,15 +166,11 @@ export default class {
       };
     }
     catch (e) {
+      // If proxies cannot be created for some reason, release the session
       debug(e);
       await t.stopDeviceSession(session.id);
     }
 
     return device;
-  }
-
-  async getDevices() {
-    let devices = await this.client.getDevices();
-    return devices;
   }
 }
