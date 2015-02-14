@@ -34,8 +34,10 @@ provided at the build url.
 CLOUD_HOST='testdroid'
 DEVICE_TYPE='t2m flame'
 BUILD_URL='http://path/to/build/'
+MEMORY=319
 
-deviceSession=`curl -L -G --data-urlencode "type=$DEVICE_TYPE" --data-urlencode "buildUrl=$BUILD_URL" http://$CLOUD_HOST/device`
+deviceSession=`curl --request POST --data-urlencode "type=$DEVICE_TYPE" --data-urlencode "memory=$MEMORY" --data-urlencode "buildUrl=$BUILD_URL" http://$CLOUD_HOST/device`
+
 ```
 
 ### Releasing a device

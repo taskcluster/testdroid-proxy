@@ -19,7 +19,7 @@
     "debug": "^2.1.1",
     "hapi": "^8.1.0",
     "joi": "^5.1.0",
-    "testdroid-client": "0.0.2",
+    "testdroid-client": "0.0.2-alpha1",
     "url-join": "0.0.1"
   }
 }

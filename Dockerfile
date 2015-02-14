@@ -8,7 +8,6 @@ RUN curl -sL https://deb.nodesource.com/setup | sudo bash -
 
 RUN apt-get install -y nodejs python build-essential
 
-RUN npm install -g 6to5
 COPY . /testdroid-proxy
 
 WORKDIR /testdroid-proxy

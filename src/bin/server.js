@@ -61,12 +61,14 @@ server.route([
     }
   },
   {
-    method: 'GET',
+    method: 'POST',
     path: '/device',
     handler: async (request, reply) => {
       debug(request.url.path);
       try {
-        let device = await server.app.deviceHandler.getDevice(request.query.type, request.query.buildUrl);
+        let device = await server.app.deviceHandler.getDevice(
+            request.payload.type, request.payload.memory, request.payload.buildUrl
+        );
         if (!device) {
           throw new Error("Couldn't create device session");
         }
@@ -80,9 +82,10 @@ server.route([
     },
     config: {
       validate: {
-        query: {
+        payload: {
           //TODO Add better validation https://gist.github.com/dperini/729294
           type: Joi.string().required(),
+          memory: Joi.number().required(),
           buildUrl: Joi.string().required()
         }
       },

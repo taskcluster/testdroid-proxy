@@ -1,6 +1,6 @@
 import Debug from 'debug';
 import util from 'util';
-import sleep from '../util';
+import { sleep } from '../util';
 
 let debug = Debug('testdroid-proxy:handler:device');
 let buildLabelGroupName = 'Build Identifier';
@@ -19,9 +19,9 @@ export default class {
    * @param {String} buildUrl - Location of the build packge used for flashing the device
    *
    */
-  async flashDevice(deviceType, buildUrl) {
-    let t = this.client;
-    let project = await t.getProject(flashProjectName);
+  async flashDevice(deviceType, memory, buildUrl) {
+    let client = this.client;
+    let project = await client.getProject(flashProjectName);
     let testRun = await project.createTestRun();
 
     let projectTestRunConfig = await project.getTestRunConfig(testRun);
@@ -31,8 +31,9 @@ export default class {
       await project.deleteTestRunParameter(testRun, testRunParams[i]);
     }
 
-    let param = await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': buildUrl});
-    let devices = await t.getDevicesByName(deviceType);
+    await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': buildUrl});
+    await project.createTestRunParameter(testRun, {'key': 'MEM_TOTAL', 'value': memory});
+    let devices = await client.getDevicesByName(deviceType);
     let device = devices.find(d => d.online === true);
     if (!device) {
       throw new Error("Couldn't find device that is online");
@@ -51,7 +52,7 @@ export default class {
         let res = await testRun.abort();
         throw new Error(res);
       }
-      await sleep(10000);
+      await sleep(2000);
       testRun = await project.getTestRun(testRun);
     }
     let finishedAt = new Date(Date.now());
@@ -80,10 +81,9 @@ export default class {
    */
   async getDeviceSession(devices) {
     let session;
-    for(let i = 0; i < devices.length; i++) {
-      let device = devices[i];
+    for(let device of devices) {
       if (!device.online) continue;
-      let maxRetries = 3;
+      let maxRetries = 10;
       while (maxRetries-- > 0) {
         try {
           session = await this.client.startDeviceSession(device.id);
@@ -92,7 +92,7 @@ export default class {
         catch (e) {
           debug(`Could not start device session for ${device.id}. Retries left: ${maxRetries}. ${e}`);
           // Noticed a delay between flashing and starting a device session
-          await sleep(2000);
+          await sleep(1000);
         }
       }
     }
@@ -124,21 +124,22 @@ export default class {
    *
    * @returns {Object} device - Device object that has session and proxy information.
    */
-  async getDevice(deviceType, buildUrl) {
-    let t = this.client;
-    debug(`Attempting to get a ${deviceType} device with ${buildUrl}`);
+  async getDevice(deviceType, memory, buildUrl) {
+    debug(`Attempting to get a ${deviceType} device with ${memory} mb memory and build ${buildUrl}`);
+    let buildLabel = `${memory}_${buildUrl}`;
+    let client = this.client;
     let device, session;
     let maxRetries = 2;
 
-    let labelGroup = await t.getLabelGroup(buildLabelGroupName);
+    let labelGroup = await client.getLabelGroup(buildLabelGroupName);
     while (maxRetries-- > 0) {
       debug(`Attempting to get a ${deviceType} device with ${buildUrl}. Retries left: ${maxRetries}`);
       // Find out if the label for the build url exists. Label won't exist if
       // build never was flashed before.
-      let label = await t.getLabelInGroup(buildUrl, labelGroup);
+      let label = await client.getLabelInGroup(buildLabel, labelGroup);
       // if it does exist, find devices labeled with it
       if (label) {
-        let devices = await t.getDevicesWithLabel(label);
+        let devices = await client.getDevicesWithLabel(label);
         if (devices.length) {
           // If devices with label, try to get session
           session = await this.getDeviceSession(devices);
@@ -147,15 +148,15 @@ export default class {
         }
       }
       // If no label or can't create a device session, flash something and try again
-      await this.flashDevice(deviceType, buildUrl);
+      await this.flashDevice(deviceType, memory, buildUrl);
     }
 
     if(!session) return;
 
     // By default, this can take up to 150 seconds
     try {
-      let adb = await t.getProxy('adb', session.id);
-      let marionette = await t.getProxy('marionette', session.id);
+      let adb = await client.getProxy('adb', session.id);
+      let marionette = await client.getProxy('marionette', session.id);
       device = {
         session: session,
         device: session.device,
@@ -168,7 +169,7 @@ export default class {
     catch (e) {
       // If proxies cannot be created for some reason, release the session
       debug(e);
-      await t.stopDeviceSession(session.id);
+      await client.stopDeviceSession(session.id);
     }
 
     return device;
