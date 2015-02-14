@@ -1,0 +1,25 @@
+{
+  "name": "testdroid-proxy",
+  "version": "0.0.3",
+  "description": "Proxy container for testdroid cloud api to be used within taskcluster.",
+  "main": "build/bin/server.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/taskcluster/testdroid-proxy.git"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublish": "6to5 -s -m common -e src --out-dir build"
+  },
+  "author": "Greg Arndt",
+  "license": "Apache2",
+  "dependencies": {
+    "6to5": "^3.3.10",
+    "argparse": "^0.1.16",
+    "debug": "^2.1.1",
+    "hapi": "^8.1.0",
+    "joi": "^5.1.0",
+    "testdroid-client": "0.0.2-alpha1",
+    "url-join": "0.0.1"
+  }
+}
