@@ -3,8 +3,7 @@ import util from 'util';
 import { sleep } from '../util';
 
 let debug = Debug('testdroid-proxy:handler:device');
-let buildLabelGroupName = 'Build Identifier';
-let flashProjectName = 'flash-fxos';
+let flashProjectName = 'flash-fxos-new-url';
 
 export default class {
   constructor(testdroid) {
@@ -19,7 +18,15 @@ export default class {
    * @param {String} buildUrl - Location of the build packge used for flashing the device
    *
    */
-  async flashDevice(deviceType, memory, buildUrl) {
+  async flashDevice(filter) {
+    let flashDeviceFilter = {};
+    for(let filterName in filter) {
+      // When finding a device to flash, do not include build and memory in the filter
+      if (['build', 'memory'].indexOf(filterName) === -1) {
+        flashDeviceFilter[filterName] = filter[filterName];
+      }
+    }
+
     let client = this.client;
     let project = await client.getProject(flashProjectName);
     let testRun = await project.createTestRun();
@@ -31,10 +38,15 @@ export default class {
       await project.deleteTestRunParameter(testRun, testRunParams[i]);
     }
 
-    await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': buildUrl});
-    await project.createTestRunParameter(testRun, {'key': 'MEM_TOTAL', 'value': memory});
-    let devices = await client.getDevicesByName(deviceType);
-    let device = devices.find(d => d.online === true);
+    await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': filter.build});
+    await project.createTestRunParameter(testRun, {'key': 'MEM_TOTAL', 'value': filter.memory});
+
+    let devices = await client.getDevices(flashDeviceFilter);
+    // find devices that are online (adb responsive) and not locked (no existing session)
+    let device = devices.find((device) => {
+      return (device.online === true && device.locked === false);
+    });
+
     if (!device) {
       throw new Error("Couldn't find device that is online");
     }
@@ -80,24 +92,26 @@ export default class {
    * @returns {Object} session
    */
   async getDeviceSession(devices) {
+    if(!devices.length) return;
     let session;
     for(let device of devices) {
-      if (!device.online) continue;
-      let maxRetries = 10;
-      while (maxRetries-- > 0) {
+      let retries = 5;
+      // Try a few times to start a device session.
+      while (--retries >= 0) {
         try {
+          debug(`Attempting to create device session for ${device.id}.`);
           session = await this.client.startDeviceSession(device.id);
           return session;
         }
         catch (e) {
-          debug(`Could not start device session for ${device.id}. Retries left: ${maxRetries}. ${e}`);
+          debug(`Could not start device session for ${device.id}. Retries left: ${retries}. ${e}`);
           // Noticed a delay between flashing and starting a device session
-          await sleep(1000);
+          await sleep(2000);
         }
       }
     }
 
-    return session;
+    return null;
   }
 
   /**
@@ -119,40 +133,30 @@ export default class {
    *
    * Once a device can be found, ADB and marionette sessions will be created.
    *
-   * @param {String} deviceType - Type of device that testdroid is aware of. Example: 't2m flame'
-   * @param {String} buildUrl - Location of the build packge used for flashing the device
+   * @param {String} filter - A filter of device capabilities used for finding a device
+   * @param {Number} maxRetries - Number of times to retry flashing/finding device
    *
    * @returns {Object} device - Device object that has session and proxy information.
    */
-  async getDevice(deviceType, memory, buildUrl) {
-    debug(`Attempting to get a ${deviceType} device with ${memory} mb memory and build ${buildUrl}`);
-    let buildLabel = `${memory}_${buildUrl}`;
+  async getDevice(filter, maxRetries) {
     let client = this.client;
     let device, session;
-    let maxRetries = 2;
 
-    let labelGroup = await client.getLabelGroup(buildLabelGroupName);
-    while (maxRetries-- > 0) {
-      debug(`Attempting to get a ${deviceType} device with ${buildUrl}. Retries left: ${maxRetries}`);
-      // Find out if the label for the build url exists. Label won't exist if
-      // build never was flashed before.
-      let label = await client.getLabelInGroup(buildLabel, labelGroup);
-      // if it does exist, find devices labeled with it
-      if (label) {
-        let devices = await client.getDevicesWithLabel(label);
-        if (devices.length) {
-          // If devices with label, try to get session
-          session = await this.getDeviceSession(devices);
-          // Return if there is a session, otherwise run flash project
-          if(session) break;
-        }
-      }
+    while (--maxRetries >= 0) {
+      let devices = await this.getOnlineDevices(filter, 1);
+      // If device exists with the given filter, try to get session
+      session = await this.getDeviceSession(devices);
+      // Return if there is a session, otherwise run flash project
+      if(session) break;
       // If no label or can't create a device session, flash something and try again
-      await this.flashDevice(deviceType, memory, buildUrl);
+      await this.flashDevice(filter);
+
+      devices = await this.getOnlineDevices(filter);
+      session = await this.getDeviceSession(devices);
+      if (session) break;
     }
 
-    if(!session) return;
-
+    if (!session) return;
     // By default, this can take up to 150 seconds
     try {
       let adb = await client.getProxy('adb', session.id);
@@ -173,5 +177,65 @@ export default class {
     }
 
     return device;
+  }
+
+  /**
+   * Attempt to find an online device with the given filter.  Because of the delay
+   * between flashing and the device being ready for ADB, there is a retry with
+   * delay that can be adjusted later.
+   *
+   * @param {Object} filter
+   * @param {Number} retries
+   *
+   * @returns {Array} devices
+   */
+  async getOnlineDevices(filter, retries=5) {
+    // Search for online device for 10 seconds.  Delay between flashing and device coming online
+    let onlineDevices;
+    while (--retries >= 0) {
+      debug(`Attempting to find online vailable device. Retries left: ${retries}`);
+      let devices = await this.client.getDevices(filter);
+      if(!devices.length) continue;
+
+      onlineDevices = devices.filter((device) => {
+        return (device.online === true && device.locked === false);
+      });
+
+      if(onlineDevices.length) return onlineDevices;
+
+      await sleep(2000);
+    }
+
+    debug("Could't find online device");
+    return [];
+  }
+
+  /**
+   * Retrieve the properties of a device and turn them into a group name = label
+   * object that can be passed as testvars.
+   *
+   * @param {Object} device
+   *
+   * @returns {Object}
+   */
+  async getDeviceProperties(device) {
+    let propertyData = await this.client.getDeviceProperties(device);
+    let properties = {};
+    for(let property of propertyData) {
+      let groupName = property['propertyGroupName'].toLowerCase().replace(" ", "_");
+      let value = property['displayName'];
+      if(groupName in properties) {
+        if (typeof(properties[groupName]) === Array) {
+          properties[groupName].push(value);
+        }
+        else {
+          properties[groupName] = [properties[groupName], value];
+        }
+        continue;
+      }
+      properties[groupName] = value;
+    }
+
+    return properties;
   }
 }

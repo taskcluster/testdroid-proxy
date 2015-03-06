@@ -67,13 +67,14 @@ server.route([
       debug(request.url.path);
       try {
         let device = await server.app.deviceHandler.getDevice(
-            request.payload.type, request.payload.memory, request.payload.buildUrl
+          request.payload, 2
         );
+
         if (!device) {
           throw new Error("Couldn't create device session");
         }
-        server.app.device = device
-        reply(device)
+        server.app.device = device;
+        reply(device);
       }
       catch (e) {
         debug(e);
@@ -83,10 +84,12 @@ server.route([
     config: {
       validate: {
         payload: {
-          //TODO Add better validation https://gist.github.com/dperini/729294
           type: Joi.string().required(),
-          memory: Joi.number().required(),
-          buildUrl: Joi.string().required()
+          build: Joi.string().required(),
+          memory: Joi.string().required(),
+          sims: Joi.string().optional(),
+          imei: Joi.string().optional(),
+          phone_number: Joi.string().optional()
         }
       },
       timeout: {
@@ -109,6 +112,15 @@ server.route([
         reply('Device released');
       }
       reply('No device session to release').status(400);
+    }
+  },
+  {
+    method: 'GET',
+    path: '/device/properties',
+    handler: async (request, reply) => {
+      debug(request.url.path);
+      let properties = await server.app.deviceHandler.getDeviceProperties(server.app.device.device);
+      reply(properties).status(200);
     }
   }
 
