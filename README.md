@@ -32,12 +32,27 @@ provided at the build url.
 
 ```sh
 CLOUD_HOST='testdroid'
-DEVICE_TYPE='t2m flame'
+DEVICE_TYPE='flame'
 BUILD_URL='http://path/to/build/'
-MEMORY=319
+MEMORY='319'
 
-deviceSession=`curl --request POST --data-urlencode "type=$DEVICE_TYPE" --data-urlencode "memory=$MEMORY" --data-urlencode "buildUrl=$BUILD_URL" http://$CLOUD_HOST/device`
+deviceSession=`curl --request POST -H "Content-Type: application/json" -d '{"type":"$DEVICE_TYPE","memory":"$MEMORY","build":"$BUILD_URL"}' http://$CLOUD_HOST/device`
 
+```
+
+### Device Capabilities
+Devices can be requested that meet a certain set of capabilities. Capabilities
+are provided as a JSON payload.
+
+```js
+{
+  "build": "http://path/to/build",
+  "memory": "319",
+  "type": "flame",
+  "sims": "1",
+  "imei": "1234234623424",
+  "phone_number": "555-555-5555"
+}
 ```
 
 ### Releasing a device

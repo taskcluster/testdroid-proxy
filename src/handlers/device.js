@@ -3,6 +3,10 @@ import util from 'util';
 import { sleep } from '../util';
 
 let debug = Debug('testdroid-proxy:handler:device');
+
+// Flash project as defined within the Testdroid Cloud.  Flash project must be
+// able to accept a build URL to flash onto the device.  'flash-fxos-new-url' is
+// used for Taskcluster signed build urls. 'flash-fxos' is used for PVT builds.
 let flashProjectName = 'flash-fxos-new-url';
 
 export default class {

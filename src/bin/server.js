@@ -55,7 +55,7 @@ server.route([
     method: 'GET',
     path: '/devices',
     handler: async (request, reply) => {
-      debug('/devices');
+      debug(`Requesting: ${request.url.path}`);
       let devices = await server.app.deviceHandler.getDevices();
       reply(devices);
     }
@@ -64,7 +64,7 @@ server.route([
     method: 'POST',
     path: '/device',
     handler: async (request, reply) => {
-      debug(request.url.path);
+      debug(`Requesting: ${request.url.path}`);
       try {
         let device = await server.app.deviceHandler.getDevice(
           request.payload, 2
@@ -105,7 +105,7 @@ server.route([
     method: 'POST',
     path: '/device/release',
     handler: async (request, reply) => {
-      debug(request.url.path);
+      debug(`Requesting: ${request.url.path}`);
       if (server.app.device) {
         await server.app.deviceHandler.releaseDevice(server.app.device);
         server.app.device = undefined;
@@ -118,7 +118,7 @@ server.route([
     method: 'GET',
     path: '/device/properties',
     handler: async (request, reply) => {
-      debug(request.url.path);
+      debug(`Requesting: ${request.url.path}`);
       let properties = await server.app.deviceHandler.getDeviceProperties(server.app.device.device);
       reply(properties).status(200);
     }
