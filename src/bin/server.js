@@ -1,4 +1,4 @@
-require('6to5/polyfill');
+require('babel/polyfill');
 import { version } from '../../package.json';
 import Debug from 'debug';
 import util from 'util';
@@ -35,7 +35,23 @@ parser.addArgument(
 parser.addArgument(
   ['-p', '--password'],
   {
-    help: 'Password for Testd`roid user',
+    help: 'Password for Testdroid user',
+    required: true
+  }
+);
+
+parser.addArgument(
+  ['--taskcluster-client-id'],
+  {
+    help: 'Client ID for taskcluster.',
+    required: true
+  }
+);
+
+parser.addArgument(
+  ['--taskcluster-access-token'],
+  {
+    help: 'Access token for taskcluster.',
     required: true
   }
 );
@@ -128,7 +144,23 @@ server.route([
 
 server.start(() => {
   console.log('server started');
-  server.app.testdroid = new Testdroid(args.cloud_url, args.username, args.password);
-  server.app.deviceHandler = new DeviceHandler(server.app.testdroid);
+  server.app.testdroid = {
+    url: args.cloud_url,
+    credentials: {
+      username: args.username,
+      password: args.password
+    }
+  };
+  server.app.taskcluster = {
+    credentials: {
+      clientId: args.taskcluster_client_id,
+      accessToken: args.taskcluster_access_token
+    }
+  };
+
+  server.app.testdroid.client = new Testdroid(
+    args.cloud_url, args.username, args.password
+  );
+  server.app.deviceHandler = new DeviceHandler(server.app);
 });
 

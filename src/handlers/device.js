@@ -1,22 +1,29 @@
+import assert from 'assert';
 import Debug from 'debug';
 import util from 'util';
 import { sleep } from '../util';
+import { getSignedUrl } from '../lib/auth';
 
 let debug = Debug('testdroid-proxy:handler:device');
+
+const PROXY_HOST = '54.67.13.230';
 
 // Flash project as defined within the Testdroid Cloud.  Flash project must be
 // able to accept a build URL to flash onto the device.  'flash-fxos-new-url' is
 // used for Taskcluster signed build urls. 'flash-fxos' is used for PVT builds.
-let flashProjectName = 'flash-fxos-new-url';
+const FLASH_PROJECT_NAME = 'flash-fxos-new-url';
 
 export default class {
-  constructor(testdroid) {
+  constructor(config) {
+    assert(config.testdroid.client, 'Testdroid client is required');
+    assert(config.taskcluster.credentials, 'Taskcluster credentials are required');
     this.flashStatus = undefined;
-    this.client = testdroid;
+    this.client = config.testdroid.client;
+    this.taskclusterCredentials = config.taskcluster.credentials;
   }
 
   /**
-   * Will flash a given `deviceType` with the build package found at `buildUrl`.
+   * Will flash a given deviceType with the build package found at buildUrl.
    *
    * @param {String} deviceType - Type of device that testdroid is aware of. Example: 't2m flame'
    * @param {String} buildUrl - Location of the build packge used for flashing the device
@@ -32,7 +39,7 @@ export default class {
     }
 
     let client = this.client;
-    let project = await client.getProject(flashProjectName);
+    let project = await client.getProject(FLASH_PROJECT_NAME);
     let testRun = await project.createTestRun();
 
     let projectTestRunConfig = await project.getTestRunConfig(testRun);
@@ -145,6 +152,11 @@ export default class {
   async getDevice(filter, maxRetries) {
     let client = this.client;
     let device, session;
+    filter.build = getSignedUrl(
+      filter.build,
+      this.taskclusterCredentials.clientId,
+      this.taskclusterCredentials.accessToken
+    );
 
     while (--maxRetries >= 0) {
       let devices = await this.getOnlineDevices(filter, 1);
@@ -171,7 +183,8 @@ export default class {
         proxies: {
           adb: adb,
           marionette: marionette
-        }
+        },
+        proxyHost: PROXY_HOST
       };
     }
     catch (e) {
