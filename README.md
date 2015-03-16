@@ -49,9 +49,9 @@ are provided as a JSON payload.
   "build": "http://path/to/build",
   "memory": "319",
   "type": "flame",
-  "sims": "1",
-  "imei": "1234234623424",
-  "phone_number": "555-555-5555"
+  "sims": "1",                        // optional
+  "imei": "1234234623424",            // optional
+  "phone_number": "555-555-5555"      // optional
 }
 ```
 
