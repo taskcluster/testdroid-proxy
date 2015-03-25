@@ -29,7 +29,7 @@ export default class {
    * @param {String} buildUrl - Location of the build packge used for flashing the device
    *
    */
-  async flashDevice(filter) {
+  async flashDevice(filter, buildUrl) {
     let flashDeviceFilter = {};
     for(let filterName in filter) {
       // When finding a device to flash, do not include build and memory in the filter
@@ -37,6 +37,8 @@ export default class {
         flashDeviceFilter[filterName] = filter[filterName];
       }
     }
+
+    let buildLabel = `${filter.memory}_${filter.build}`;
 
     let client = this.client;
     let project = await client.getProject(FLASH_PROJECT_NAME);
@@ -49,8 +51,9 @@ export default class {
       await project.deleteTestRunParameter(testRun, testRunParams[i]);
     }
 
-    await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': filter.build});
+    await project.createTestRunParameter(testRun, {'key': 'FLAME_ZIP_URL', 'value': buildUrl});
     await project.createTestRunParameter(testRun, {'key': 'MEM_TOTAL', 'value': filter.memory});
+    await project.createTestRunParameter(testRun, {'key': 'BUILD_LABEL', 'value': buildLabel});
 
     let devices = await client.getDevices(flashDeviceFilter);
     // find devices that are online (adb responsive) and not locked (no existing session)
@@ -152,7 +155,7 @@ export default class {
   async getDevice(filter, maxRetries) {
     let client = this.client;
     let device, session;
-    filter.build = getSignedUrl(
+    let buildUrl = getSignedUrl(
       filter.build,
       this.taskclusterCredentials.clientId,
       this.taskclusterCredentials.accessToken
@@ -165,7 +168,7 @@ export default class {
       // Return if there is a session, otherwise run flash project
       if(session) break;
       // If no label or can't create a device session, flash something and try again
-      await this.flashDevice(filter);
+      await this.flashDevice(filter, buildUrl);
 
       devices = await this.getOnlineDevices(filter);
       session = await this.getDeviceSession(devices);
