@@ -56,33 +56,48 @@ export default class {
     await project.createTestRunParameter(testRun, {'key': 'BUILD_LABEL', 'value': buildLabel});
 
     let devices = await client.getDevices(flashDeviceFilter);
+    if (!devices.length) {
+      throw new Error(
+        'Could not find find device with capabilities: ' +
+        JSON.stringify(flashDeviceFilter)
+      );
+    }
     // find devices that are online (adb responsive) and not locked (no existing session)
     let device = devices.find((device) => {
       return (device.online === true && device.locked === false);
     });
 
     if (!device) {
-      throw new Error("Couldn't find device that is online");
+      throw new Error(
+        `Found ${devices.length} device(s) for flashing with desired ` +
+        'capabilities but none were online and unlocked. ' +
+        'Capabilities: ' + JSON.stringify(flashDeviceFilter)
+      );
     }
 
+    debug(`Found online and unlocked device for flashing with ID ${device.id}`);
     let deviceIDs = { 'usedDeviceIds[]': device.id };
 
     let startTestRun = await testRun.start(deviceIDs);
     testRun = await project.getTestRun(testRun);
     let createdAt = new Date(testRun.createTime);
     debug(`Test Run ${testRun.id} created at ${createdAt}`);
+    // TODO make configurable
     let timeout = Date.now() + 10*60*1000;
     while (testRun.state !== 'FINISHED') {
       debug(`Test Run ${testRun.id} currently ${testRun.state}`);
       if (Date.now() > timeout) {
         let res = await testRun.abort();
-        throw new Error(res);
+        throw new Error('Flash project aborted because it exceeeded 10 minutes');
       }
       await sleep(2000);
       testRun = await project.getTestRun(testRun);
     }
     let finishedAt = new Date(Date.now());
-    debug(`Test Run ${testRun.id} finished at ${finishedAt}. Duration: ${(finishedAt - createdAt)/1000} seconds.`);
+    debug(
+      `Test Run ${testRun.id} finished at ${finishedAt}. ` +
+      `Duration: ${(finishedAt - createdAt)/1000} seconds.`
+    );
     debug(util.inspect(testRun));
     // TODO: Inspect the test run and see if the success/failure of the run can be inferred.
   }
@@ -153,6 +168,7 @@ export default class {
    * @returns {Object} device - Device object that has session and proxy information.
    */
   async getDevice(filter, maxRetries) {
+    let attempts = maxRetries;
     let client = this.client;
     let device, session;
     let buildUrl = getSignedUrl(
@@ -161,21 +177,44 @@ export default class {
       this.taskclusterCredentials.accessToken
     );
 
+    debug(`Built signed url for build: ${buildUrl}`);
+
     while (--maxRetries >= 0) {
+      debug(
+        "Attempting to find (or flash) a device with given capabilities. " +
+        `Capabilities: ${JSON.stringify(filter)}`
+      );
+
       let devices = await this.getOnlineDevices(filter, 1);
       // If device exists with the given filter, try to get session
       session = await this.getDeviceSession(devices);
       // Return if there is a session, otherwise run flash project
       if(session) break;
-      // If no label or can't create a device session, flash something and try again
+      // If no label or can't create a device session,
+      // flash something and try again
+      debug(`No online devices found with filter: ${JSON.stringify(filter)}. `+
+            `Running flash project.`
+      );
       await this.flashDevice(filter, buildUrl);
 
       devices = await this.getOnlineDevices(filter);
+      if (!devices.length && maxRetries === 0) {
+        throw new Error(
+          `Device does not appear online and unlocked after ` +
+          `${attempts} flashing attempts.`
+        );
+      }
+
       session = await this.getDeviceSession(devices);
       if (session) break;
+
+      if (maxRetries === 0) {
+        throw new Error(
+          `Could not create device session after ${attempts} flashing attempts`
+        );
+      }
     }
 
-    if (!session) return;
     // By default, this can take up to 150 seconds
     try {
       let adb = await client.getProxy('adb', session.id);
@@ -194,6 +233,7 @@ export default class {
       // If proxies cannot be created for some reason, release the session
       debug(e);
       await client.stopDeviceSession(session.id);
+      throw e;
     }
 
     return device;
@@ -213,20 +253,27 @@ export default class {
     // Search for online device for 10 seconds.  Delay between flashing and device coming online
     let onlineDevices;
     while (--retries >= 0) {
-      debug(`Attempting to find online vailable device. Retries left: ${retries}`);
+      debug(`Attempting to find online available device. `+
+            `Capabilities: ${JSON.stringify(filter)} Retries left: ${retries}`
+      );
       let devices = await this.client.getDevices(filter);
       if(!devices.length) continue;
+
+      debug(`Found ${devices.length} device(s).`);
 
       onlineDevices = devices.filter((device) => {
         return (device.online === true && device.locked === false);
       });
 
-      if(onlineDevices.length) return onlineDevices;
+      if(onlineDevices.length) {
+        debug(`Found ${onlineDevices.length} online and unlocked device(s)`);
+        return onlineDevices;
+      }
 
-      await sleep(2000);
+      debug(`Could not find online and unlocked device.`);
+      await sleep(5000);
     }
 
-    debug("Could't find online device");
     return [];
   }
 

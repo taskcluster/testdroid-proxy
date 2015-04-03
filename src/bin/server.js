@@ -94,7 +94,7 @@ server.route([
       }
       catch (e) {
         debug(e);
-        reply(e).status(500);
+        reply({error: e.toString()}).status(500);
       }
     },
     config: {

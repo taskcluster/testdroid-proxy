@@ -1,6 +1,6 @@
 {
   "name": "testdroid-proxy",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Proxy container for testdroid cloud api to be used within taskcluster.",
   "main": "build/bin/server.js",
   "repository": {
@@ -20,7 +20,7 @@
     "hapi": "^8.1.0",
     "hawk": "^2.3.1",
     "joi": "^5.1.0",
-    "testdroid-client": "0.0.4",
+    "testdroid-client": "0.0.7",
     "url-join": "0.0.1"
   }
 }
