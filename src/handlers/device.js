@@ -6,7 +6,7 @@ import { getSignedUrl } from '../lib/auth';
 
 let debug = Debug('testdroid-proxy:handler:device');
 
-const PROXY_HOST = '54.67.13.230';
+const PROXY_HOST = '10.1.2.11';
 
 // Flash project as defined within the Testdroid Cloud.  Flash project must be
 // able to accept a build URL to flash onto the device.  'flash-fxos-new-url' is
