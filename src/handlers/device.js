@@ -62,18 +62,24 @@ export default class {
         JSON.stringify(flashDeviceFilter)
       );
     }
+
     // find devices that are online (adb responsive) and not locked (no existing session)
-    let device = devices.find((device) => {
-      return (device.online === true && device.locked === false);
+    let availableDevices = devices.filter((device) => {
+      return (device.online && !device.locked);
     });
 
-    if (!device) {
+    if (!availableDevices.length) {
       throw new Error(
         `Found ${devices.length} device(s) for flashing with desired ` +
         'capabilities but none were online and unlocked. ' +
         'Capabilities: ' + JSON.stringify(flashDeviceFilter)
       );
     }
+
+    // Randomize the phone that is retrieved to give better odds of not racing
+    // for the same one returned by the api (causes concurrent jobs to wait to
+    // try to use the same device
+    let device = availableDevices[Math.floor(Math.random()*availableDevices.length)];
 
     debug(`Found online and unlocked device for flashing with ID ${device.id}`);
     let deviceIDs = { 'usedDeviceIds[]': device.id };
@@ -87,19 +93,50 @@ export default class {
     while (testRun.state !== 'FINISHED') {
       debug(`Test Run ${testRun.id} currently ${testRun.state}`);
       if (Date.now() > timeout) {
-        let res = await testRun.abort();
-        throw new Error('Flash project aborted because it exceeeded 10 minutes');
+        if (testRun.state === 'WAITING') {
+          await testRun.abort();
+        }
+
+        throw new Error(
+          `Flash project aborted because it exceeeded 10 minutes. ` +
+          `Flash Run State: ${testRun.state}`
+        );
       }
-      await sleep(2000);
+      await sleep(10000);
       testRun = await project.getTestRun(testRun);
     }
+
     let finishedAt = new Date(Date.now());
+    let duration = (finishedAt - createdAt)/1000;
+    // TODO: Inspect the test run and see if the success/failure of the
+    // run can be inferred.
     debug(
       `Test Run ${testRun.id} finished at ${finishedAt}. ` +
-      `Duration: ${(finishedAt - createdAt)/1000} seconds.`
+      `Duration: ${duration} seconds.`
     );
-    debug(util.inspect(testRun));
-    // TODO: Inspect the test run and see if the success/failure of the run can be inferred.
+
+    let flashedDevice;
+    while (!flashedDevice || (!flashedDevice.online || flashedDevice.locked)) {
+      if (Date.now() > timeout) {
+
+        let error = `Flash project finished within ${duration} seconds but ` +
+                    `flashed device did not appear online and unlocked.`
+
+        if (flashedDevice) {
+          error += ` Locked: ${flashedDevice.locked} Online: ${flashedDevice.online}`
+        }
+
+        throw new Error(error);
+      }
+
+      let allDevices = await this.getDevices(filter);
+
+      flashedDevice = allDevices.find(d => {
+        return d.id === device.id
+      })
+    }
+
+    return flashedDevice;
   }
 
   /**
@@ -122,6 +159,7 @@ export default class {
    */
   async getDeviceSession(devices) {
     if(!devices.length) return;
+
     let session;
     for(let device of devices) {
       let retries = 5;
@@ -195,17 +233,21 @@ export default class {
       debug(`No online devices found with filter: ${JSON.stringify(filter)}. `+
             `Running flash project.`
       );
-      await this.flashDevice(filter, buildUrl);
 
-      devices = await this.getOnlineDevices(filter);
-      if (!devices.length && maxRetries === 0) {
-        throw new Error(
-          `Device does not appear online and unlocked after ` +
-          `${attempts} flashing attempts.`
-        );
+      let device;
+      try {
+        device = await this.flashDevice(filter, buildUrl);
+      }
+      catch (e) {
+        if (maxRetries === 0) {
+          throw new Error(
+            `Could not flash device after ${attempts} ` +
+            `attempts. Error: ${e}`
+          );
+        }
       }
 
-      session = await this.getDeviceSession(devices);
+      session = await this.getDeviceSession([device]);
       if (session) break;
 
       if (maxRetries === 0) {

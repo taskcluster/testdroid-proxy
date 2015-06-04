@@ -109,11 +109,11 @@ server.route([
         }
       },
       timeout: {
-        // Keep connection open for up to 10 minutes while flashing
+        // Keep connection open for up to 10 minutes per flashing attempt
         // XXX: This is a hack, in the future should make available a status
         // endpoint to query instead of keeping this open.
-        server: 10*60*1000,
-        socket: 11*60*1000
+        server: 22*60*1000,
+        socket: 23*60*1000
       }
     }
   },
