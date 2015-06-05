@@ -17,9 +17,11 @@ export default class {
   constructor(config) {
     assert(config.testdroid.client, 'Testdroid client is required');
     assert(config.taskcluster.credentials, 'Taskcluster credentials are required');
+    assert(config.deviceTimeout, 'Timeout in seconds for device session is required');
     this.flashStatus = undefined;
     this.client = config.testdroid.client;
     this.taskclusterCredentials = config.taskcluster.credentials;
+    this.deviceTimeout = config.deviceTimeout;
   }
 
   /**
@@ -154,6 +156,7 @@ export default class {
    * between attempts.
    *
    * @param {Array} devices - List of devices provided by the testdroid api.
+   * @param {Number} timeout - Session timeout in seconds
    *
    * @returns {Object} session
    */
@@ -167,11 +170,14 @@ export default class {
       while (--retries >= 0) {
         try {
           debug(`Attempting to create device session for ${device.id}.`);
-          session = await this.client.startDeviceSession(device.id);
+          session = await this.client.startDeviceSession(device.id, this.deviceTimeout);
           return session;
         }
         catch (e) {
-          debug(`Could not start device session for ${device.id}. Retries left: ${retries}. ${e}`);
+          debug(
+            `Could not start device session for ${device.id}. ` +
+            `Retries left: ${retries}. ${e}`
+          );
           // Noticed a delay between flashing and starting a device session
           await sleep(2000);
         }

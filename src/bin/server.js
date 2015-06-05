@@ -56,6 +56,14 @@ parser.addArgument(
   }
 );
 
+parser.addArgument(
+  ['--device-timeout'],
+  {
+    help: 'Timeout in seconds for device session',
+    require: true
+  }
+);
+
 let args = parser.parseArgs();
 
 let server = new Hapi.Server();
@@ -157,6 +165,8 @@ server.start(() => {
       accessToken: args.taskcluster_access_token
     }
   };
+
+  server.app.deviceTimeout = args.device_timeout;
 
   server.app.testdroid.client = new Testdroid(
     args.cloud_url, args.username, args.password
