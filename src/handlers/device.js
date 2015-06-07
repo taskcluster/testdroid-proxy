@@ -117,6 +117,16 @@ export default class {
       `Duration: ${duration} seconds.`
     );
 
+    let deviceRunList = await testRun.getDeviceRunsList();
+    for (let deviceRun of deviceRunList) {
+      if (deviceRun.runStatus === 'FAILED') {
+        let error = `Flash project finished within ${duration} seconds but ` +
+                    `finished with a status of FAILED.  Ensure that build URL ` +
+                    `for a valid build.`;
+        throw new Error(error);
+      }
+    }
+
     let flashedDevice;
     while (!flashedDevice || (!flashedDevice.online || flashedDevice.locked)) {
       if (Date.now() > timeout) {
@@ -224,6 +234,8 @@ export default class {
     debug(`Built signed url for build: ${buildUrl}`);
 
     while (--maxRetries >= 0) {
+      let error = '';
+
       debug(
         "Attempting to find (or flash) a device with given capabilities. " +
         `Capabilities: ${JSON.stringify(filter)}`
@@ -240,27 +252,34 @@ export default class {
             `Running flash project.`
       );
 
-      let device;
       try {
         device = await this.flashDevice(filter, buildUrl);
       }
       catch (e) {
+        error = e;
         if (maxRetries === 0) {
           throw new Error(
             `Could not flash device after ${attempts} ` +
-            `attempts. Error: ${e}`
+            `attempts. ${e}`
           );
         }
       }
 
-      session = await this.getDeviceSession([device]);
-      if (session) break;
+      if (device) {
+        session = await this.getDeviceSession([device]);
+        if (session) break;
 
-      if (maxRetries === 0) {
+      }
+
+      if ((!device || !session) && maxRetries === 0) {
+
         throw new Error(
-          `Could not create device session after ${attempts} flashing attempts`
+          `Could not create device session after ${attempts} ` +
+          `flashing attempts. ${error}`
         );
       }
+
+      await sleep(10*1000);
     }
 
     // By default, this can take up to 150 seconds
