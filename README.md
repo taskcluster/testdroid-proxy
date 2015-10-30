@@ -42,7 +42,8 @@ deviceSession=`curl --request POST -H "Content-Type: application/json" -d '{"typ
 
 ### Device Capabilities
 Devices can be requested that meet a certain set of capabilities. Capabilities
-are provided as a JSON payload.
+are provided as a JSON payload.  When using within a taskcluster task, these can be
+provided in task.payload.capabilities.devices.phone such as below.
 
 ```js
 {
