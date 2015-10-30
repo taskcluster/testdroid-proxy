@@ -46,12 +46,20 @@ are provided as a JSON payload.
 
 ```js
 {
-  "build": "http://path/to/build",
-  "memory": "319",
-  "type": "flame",
-  "sims": "1",                        // optional
-  "imei": "1234234623424",            // optional
-  "phone_number": "555-555-5555"      // optional
+  "payload": {
+    "capabilities": {
+      "devices": {
+        "phone": {
+          "build": "http://path/to/build",
+          "memory": "319",
+          "type": "flame",
+          "sims": "1",                        // optional
+          "imei": "1234234623424",            // optional
+          "phone_number": "555-555-5555"      // optional
+        }
+      }
+    }
+  }
 }
 ```
 
