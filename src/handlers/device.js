@@ -1,6 +1,7 @@
 import assert from 'assert';
 import Debug from 'debug';
 import util from 'util';
+import _ from 'lodash';
 import { sleep } from '../util';
 import { getSignedUrl } from '../lib/auth';
 
@@ -160,10 +161,10 @@ export default class {
   }
 
   /**
-   * Attempts to create a device session for one of the devices provided.  Device
-   * must be 'online'.  Because of the delay between flashing and creating a device
-   * session, a request for a session will be attempted 3 times with a 2 second delay
-   * between attempts.
+   * Attempts to create a device session for one of the devices provided (randomly
+   * selected). Device must be 'online'. Because of the delay between flashing
+   * and creating a device session, a request for a session will be attempted 3
+   * times with a 2 second delay between attempts.
    *
    * @param {Array} devices - List of devices provided by the testdroid api.
    * @param {Number} timeout - Session timeout in seconds
@@ -172,6 +173,8 @@ export default class {
    */
   async getDeviceSession(devices) {
     if(!devices.length) return;
+
+    devices = _.shuffle(devices);
 
     let session;
     for(let device of devices) {
